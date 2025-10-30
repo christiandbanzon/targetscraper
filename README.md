@@ -46,7 +46,7 @@ cp env.example .env
 
 ```bash
 # Start the API server
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # Or use Docker
 docker-compose up -d
@@ -125,23 +125,29 @@ curl "http://localhost:8000/dead-letter-queue"
 
 ```
 target-scraper/
-├── main.py                 # FastAPI application (entry point)
-├── async_keyword_scraper.py # Core scraper with async operations
-├── config.py               # Configuration management
-├── retry_utils.py          # Retry logic with exponential backoff
-├── rate_limiter.py         # Rate limiting implementation
-├── data_validator.py       # Data validation and quality checks
-├── pagination.py           # Pagination detection and handling
-├── error_recovery.py       # Error recovery and dead letter queue
+├── app/                     # Application code
+│   ├── __init__.py         # Package initialization
+│   ├── main.py             # FastAPI application (entry point)
+│   ├── async_keyword_scraper.py # Core scraper
+│   ├── config.py           # Configuration
+│   ├── retry_utils.py      # Retry logic
+│   ├── rate_limiter.py     # Rate limiting
+│   ├── data_validator.py   # Data validation
+│   ├── pagination.py       # Pagination
+│   └── error_recovery.py   # Error recovery
+├── outputs/                # Output directory (git ignored)
+├── logs/                   # Log directory (git ignored)
 ├── setup.py                # Setup script
-├── test_keyword_api.py     # API test script
-├── requirements.txt        # Python dependencies
-├── env.example             # Environment variables template
-├── Dockerfile              # Docker configuration
-├── docker-compose.yml      # Docker Compose setup
-├── nginx.conf              # Nginx reverse proxy config
+├── test_keyword_api.py     # API tests
+├── requirements.txt        # Dependencies
+├── env.example             # Environment template
+├── Dockerfile              # Docker config
+├── docker-compose.yml      # Docker Compose
+├── docker-run.sh           # Docker convenience script
+├── docker-stop.sh          # Docker convenience script
+├── nginx.conf              # Nginx config
 ├── README.md               # This file
-└── .gitignore              # Git ignore rules
+└── .gitignore              # Git ignore
 ```
 
 ## Configuration
@@ -258,7 +264,7 @@ The project follows professional Python standards:
 python test_keyword_api.py
 
 # Run with uvicorn reload for development
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Troubleshooting

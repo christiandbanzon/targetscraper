@@ -63,7 +63,7 @@ def main():
     print("SUCCESS: Setup complete!")
     print("\nNext steps:")
     print("1. Edit .env file with your Oxylabs credentials")
-    print("2. Start API: uvicorn main:app --host 0.0.0.0 --port 8000")
+    print("2. Start API: uvicorn app.main:app --host 0.0.0.0 --port 8000")
     print("3. Or use Docker: docker-compose up -d")
     
     return True
