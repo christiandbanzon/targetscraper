@@ -297,7 +297,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## License
 
-[Your License Here]
+Proprietary - All rights reserved
 
 ## Contributing
 

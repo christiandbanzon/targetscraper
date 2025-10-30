@@ -5,9 +5,6 @@ Target Product Scraper API
 A professional FastAPI application for scraping Target.com products by keyword.
 Features include async job processing, retry logic, rate limiting, pagination,
 data validation, error recovery, and real-time progress updates.
-
-Author: Target Scraper Team
-Version: 2.0.0
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
