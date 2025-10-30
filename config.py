@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
 Configuration settings for Target Scraper
+
+All sensitive credentials should be provided via environment variables.
+Never commit credentials to version control.
 """
 
 import os
 from typing import Dict, Any
 
-# Try to load environment variables from .env file
+# Load environment variables from .env file
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -14,24 +17,37 @@ except ImportError:
     # python-dotenv not installed, use system environment variables
     pass
 
+
 class Config:
-    """Configuration class for Target Scraper"""
+    """
+    Configuration class for Target Scraper
     
-    # API Credentials (from environment variables)
-    OXYLABS_USERNAME = os.getenv("OXYLABS_USERNAME", "tereo_gmDZq")
-    OXYLABS_PASSWORD = os.getenv("OXYLABS_PASSWORD", "7xiek=6GMk4BgLY")
+    All configuration values can be overridden via environment variables.
+    Sensitive credentials MUST be provided via environment variables.
+    """
+    
+    # API Credentials (MUST be provided via environment variables)
+    OXYLABS_USERNAME = os.getenv("OXYLABS_USERNAME")
+    OXYLABS_PASSWORD = os.getenv("OXYLABS_PASSWORD")
+    
+    # Validate required credentials
+    if not OXYLABS_USERNAME or not OXYLABS_PASSWORD:
+        raise ValueError(
+            "OXYLABS_USERNAME and OXYLABS_PASSWORD must be set via environment variables. "
+            "Create a .env file or set them as environment variables."
+        )
     
     # API Settings
     API_BASE_URL = "https://realtime.oxylabs.io/v1/queries"
-    API_TIMEOUT = 120
-    API_MAX_RETRIES = 3
+    API_TIMEOUT = int(os.getenv("API_TIMEOUT", "120"))
+    API_MAX_RETRIES = int(os.getenv("API_MAX_RETRIES", "3"))
     
     # Scraping Settings
-    DEFAULT_GEO_LOCATION = "United States"
-    DEFAULT_USER_AGENT_TYPE = "desktop"
+    DEFAULT_GEO_LOCATION = os.getenv("DEFAULT_GEO_LOCATION", "United States")
+    DEFAULT_USER_AGENT_TYPE = os.getenv("DEFAULT_USER_AGENT_TYPE", "desktop")
     
     # File Settings
-    OUTPUT_DIR = "outputs"
+    OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
     CSV_FIELDNAMES = [
         "listing_title", "listings_url", "image_url", "marketplace", "price", "currency",
         "shipping", "units_available", "item_number", "tcin", "upc", "seller_name",
@@ -52,7 +68,12 @@ class Config:
     
     @classmethod
     def get_headers(cls) -> Dict[str, str]:
-        """Get default HTTP headers"""
+        """
+        Get default HTTP headers for API requests
+        
+        Returns:
+            Dictionary of HTTP headers
+        """
         return {
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -60,7 +81,15 @@ class Config:
     
     @classmethod
     def get_search_payload(cls, query: str) -> Dict[str, Any]:
-        """Get standard search payload for Oxylabs API"""
+        """
+        Get standard search payload for Oxylabs API
+        
+        Args:
+            query: Search query string
+            
+        Returns:
+            Dictionary payload for API request
+        """
         return {
             "source": "target_search",
             "query": query,
