@@ -46,13 +46,14 @@ desktop.ini
 .env.staging
 .env.*.local
 
-# Output files and logs
-outputs/
-logs/
+# Output files and logs (keep folder structure with .gitkeep)
+outputs/*
+!outputs/.gitkeep
+logs/*
+!logs/.gitkeep
 *.log
 *.csv
 *.json
-!outputs/.gitkeep
 
 # Temporary files
 *.tmp
