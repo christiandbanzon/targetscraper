@@ -8,11 +8,16 @@ Never commit credentials to version control.
 
 import os
 from typing import Dict, Any
+from pathlib import Path
 
 # Load environment variables from .env file
+# Look for .env in project root (parent of app/ directory)
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # Get project root (parent of app directory)
+    project_root = Path(__file__).parent.parent
+    env_path = project_root / '.env'
+    load_dotenv(env_path)
 except ImportError:
     # python-dotenv not installed, use system environment variables
     pass

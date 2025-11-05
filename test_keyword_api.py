@@ -19,15 +19,15 @@ def test_keyword_api():
         response = requests.get(f"{API_BASE}/")
         if response.status_code == 200:
             data = response.json()
-        print(f"SUCCESS: API Status: {data['status']}")
-        print(f"SUCCESS: Available endpoints: {list(data['endpoints'].keys())}")
-    else:
-        print(f"ERROR: API Error: {response.status_code}")
+            print(f"SUCCESS: API Status: {data['status']}")
+            print(f"SUCCESS: Available endpoints: {list(data['endpoints'].keys())}")
+        else:
+            print(f"ERROR: API Error: {response.status_code}")
+            return
+    except Exception as e:
+        print(f"ERROR: Connection Error: {e}")
+        print("Make sure the API server is running!")
         return
-except Exception as e:
-    print(f"ERROR: Connection Error: {e}")
-    print("Make sure the API server is running!")
-    return
     
     # Test 2: Check search examples
     print("\n2. Testing Search Examples...")

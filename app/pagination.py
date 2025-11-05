@@ -68,8 +68,13 @@ class PaginationHelper:
                             next_url = f"{base_url}{href}"
                         elif href.startswith('http'):
                             next_url = href
+                        else:
+                            next_url = f"{base_url}/{href}"
+            
+            if next_url:
+                return next_url
         
-        return next_url
+        return None
     
     @staticmethod
     def detect_page_number(html_content: str) -> Optional[int]:

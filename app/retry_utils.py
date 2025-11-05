@@ -8,7 +8,7 @@ import logging
 from typing import Callable, TypeVar, Optional, List
 from functools import wraps
 import httpx
-from config import Config
+from .config import Config
 
 logger = logging.getLogger(__name__)
 

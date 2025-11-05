@@ -18,8 +18,8 @@ import json
 import os
 from datetime import datetime
 import logging
-from config import Config
-from error_recovery import get_recovery, JobRecovery
+from .config import Config
+from .error_recovery import get_recovery, JobRecovery
 
 # Setup logging
 logging.basicConfig(level=getattr(logging, Config.LOG_LEVEL))
@@ -149,7 +149,7 @@ async def scrape_keyword(request: KeywordScrapeRequest, background_tasks: Backgr
 @app.post("/scrape/keywords/batch")
 async def scrape_keywords_batch(keywords: List[str], background_tasks: BackgroundTasks):
     """Start concurrent batch scraping for multiple keywords"""
-    from async_keyword_scraper import batch_scrape_keywords
+    from .async_keyword_scraper import batch_scrape_keywords
     
     job_id = str(uuid.uuid4())
     
@@ -428,7 +428,7 @@ async def run_keyword_scrape(job_id: str, keyword: str, max_pages: int = 5):
     """Run keyword scraping in background using async scraper with error recovery"""
     try:
         # Import async scraper
-        from async_keyword_scraper import keyword_scraper_async
+        from .async_keyword_scraper import keyword_scraper_async
         
         # Progress callback
         async def progress_callback(current_page: int, total_pages: int):
@@ -510,7 +510,7 @@ async def run_keyword_scrape(job_id: str, keyword: str, max_pages: int = 5):
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    from async_keyword_scraper import close_http_client
+    from .async_keyword_scraper import close_http_client
     await close_http_client()
 
 if __name__ == "__main__":
