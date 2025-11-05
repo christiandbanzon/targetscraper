@@ -28,8 +28,8 @@ A professional, production-ready web scraper for Target.com products with FastAP
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
-cd target-scraper
+git clone https://github.com/christiantereo/targetscraper.git
+cd targetscraper
 
 # Install dependencies
 pip install -r requirements.txt
