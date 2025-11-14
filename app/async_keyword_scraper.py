@@ -167,17 +167,20 @@ async def keyword_scraper_async(
         
         # Save results if products found
         if unique_products:
-            filename = _generate_filename(search_keyword)
-            await save_products_csv_async(unique_products, filename)
+            csv_filename = _generate_filename(search_keyword)
+            json_filename = _generate_json_filename(search_keyword)
+            await save_products_csv_async(unique_products, csv_filename)
+            await save_products_json_async(unique_products, json_filename)
             
             # Cache the results
-            response_cache[cache_key] = {"products": unique_products, "filename": filename}
+            response_cache[cache_key] = {"products": unique_products, "filename": csv_filename}
             
-            logger.info(f"SUCCESS: {len(unique_products)} products saved to {filename}")
+            logger.info(f"SUCCESS: {len(unique_products)} products saved to {csv_filename}")
             return {
                 "success": True, 
                 "products": unique_products, 
-                "filename": filename,
+                "filename": csv_filename,
+                "json_filename": json_filename,
                 "pages_scraped": page - 1,
                 "total_found": len(all_products),
                 "valid_products": len(unique_products),
@@ -254,8 +257,12 @@ async def _extract_product_data(link, href: str, seen_urls: set) -> Optional[Dic
         # Extract title (clean version without ratings/price)
         title = _extract_title(link, href)
         
-        # Extract price and currency
+        # Extract price and currency from search results
         price, currency = _extract_price_from_link(link)
+        if price:
+            logger.debug(f"Price extracted from search results: {price} for {full_url}")
+        else:
+            logger.debug(f"No price found in search results for: {full_url}")
         
         # Extract image
         image_url = _extract_image_from_link(link)
@@ -267,33 +274,44 @@ async def _extract_product_data(link, href: str, seen_urls: set) -> Optional[Dic
         # Note: This requires an additional API call per product, so it's slower
         # UPC is required for product identification, and we also fetch price if missing
         upc = ""
-        # Always fetch product detail page to get UPC, and also get price if missing
+        detail_page_price = ""
         try:
+            logger.debug(f"Fetching UPC and price from product detail page: {clean_url}")
             upc, detail_page_price = await _fetch_upc_and_price_from_product_page(clean_url)
+            
             # Use detail page price if search page didn't have one
             if not price and detail_page_price:
+                logger.info(f"Using price from product detail page: {detail_page_price} (search page had none)")
                 price = detail_page_price
+            elif price and detail_page_price:
+                logger.debug(f"Price from search page: {price}, product page: {detail_page_price}")
+            
+            if upc:
+                logger.info(f"UPC extracted successfully: {upc} for {clean_url}")
+            else:
+                logger.debug(f"UPC not found for: {clean_url}")
         except Exception as e:
-            logger.debug(f"Product detail fetch failed for {clean_url}: {e}")
+            logger.warning(f"Product detail fetch failed for {clean_url}: {e}", exc_info=True)
         
         return {
-            'listing_title': title,
-            'listings_url': clean_url,
-            'image_url': image_url,
-            'marketplace': Config.TARGET_INFO['name'],
-            'price': price,
-            'currency': currency,
-            'shipping': '',
-            'units_available': '',
-            'item_number': tcin,
-            'tcin': tcin,
-            'upc': upc,
-            'seller_name': Config.TARGET_INFO['name'],
-            'seller_url': Config.TARGET_INFO['url'],
-            'seller_business': Config.TARGET_INFO['business'],
-            'seller_address': Config.TARGET_INFO['address'],
-            'seller_email': '',
-            'seller_phone': Config.TARGET_INFO['phone']
+            'Listing Title*': title,
+            'Listings URL*': clean_url,
+            'Image URL*': image_url,
+            'Marketplace*': Config.TARGET_INFO['name'],
+            'Price*': price,
+            'Shipping': '',
+            'Units Available': '',
+            'Item Number': tcin,  # TCIN goes into Item Number column
+            'Brand': '',
+            'ASIN': '',
+            'UPC': upc,  # UPC goes into UPC column
+            'Walmart ID': '',
+            "Seller's Name*": Config.TARGET_INFO['name'],
+            "Seller's URL*": Config.TARGET_INFO['url'],
+            "Seller's Business Name": Config.TARGET_INFO['business'],
+            "Seller's Address": Config.TARGET_INFO['address'],
+            "Seller's Email": '',
+            "Seller's Phone Number": Config.TARGET_INFO['phone']
         }
     except Exception as e:
         logger.warning(f"Error extracting product data: {e}")
@@ -416,21 +434,21 @@ def _extract_title_from_url(url: str) -> str:
         return "Product"
 
 def _extract_price_from_link(link) -> Tuple[str, str]:
-    """Extract price and currency from link element
+    """Extract price and currency from link element with comprehensive methods
     
     Returns:
         tuple: (price_string, currency_code)
     """
+    extraction_methods = []
     try:
-        # Target typically stores price in data attributes or specific selectors
-        # Try multiple approaches to find price
-        
         # Method 1: Look for data-test="product-price" or similar
         price_elem = link.find(attrs={'data-test': re.compile(r'product.*price|price|current.*price')})
+        if price_elem:
+            extraction_methods.append("data-test attribute")
         
         # Method 2: Look for data attribute containing price value
         if not price_elem:
-            for attr in ['data-price', 'data-current-price', 'data-base-price', 'price']:
+            for attr in ['data-price', 'data-current-price', 'data-base-price', 'price', 'data-value']:
                 price_attr = link.get(attr)
                 if price_attr:
                     price_match = re.search(r'\$?[\d,]+\.?\d*', str(price_attr))
@@ -438,32 +456,38 @@ def _extract_price_from_link(link) -> Tuple[str, str]:
                         price_val = price_match.group(0)
                         if not price_val.startswith('$'):
                             price_val = f"${price_val}"
+                        logger.debug(f"Price found via data attribute '{attr}': {price_val}")
                         return (price_val, 'USD')
         
         # Method 3: Look for span/div with price-related classes (more specific patterns)
         if not price_elem:
-            price_elem = link.find(['span', 'div'], class_=re.compile(r'price|cost|amount|dollar|current.*price|product.*price'))
+            price_elem = link.find(['span', 'div'], class_=re.compile(r'price|cost|amount|dollar|current.*price|product.*price|Price'))
+            if price_elem:
+                extraction_methods.append("price class selector")
         
         # Method 4: Look for text content with price pattern in all descendants
         if not price_elem:
-            all_text_elements = link.find_all(['span', 'div', 'p'], string=re.compile(r'\$[\d,]+\.?\d*'))
+            all_text_elements = link.find_all(['span', 'div', 'p', 'strong', 'b'], string=re.compile(r'\$[\d,]+\.?\d*'))
             if all_text_elements:
                 price_text = all_text_elements[0].get_text(strip=True)
                 price_match = re.search(r'\$[\d,]+\.?\d*', price_text)
                 if price_match:
+                    logger.debug(f"Price found via text content: {price_match.group(0)}")
                     return (price_match.group(0), 'USD')
         
         # Method 5: Look in parent container (check multiple levels up)
         if not price_elem:
-            parent = link.find_parent(['div', 'article', 'section'])
+            parent = link.find_parent(['div', 'article', 'section', 'li'])
             if parent:
                 # Check parent and its siblings
-                price_elem = parent.find(['span', 'div'], class_=re.compile(r'price|cost|amount|current.*price'))
+                price_elem = parent.find(['span', 'div'], class_=re.compile(r'price|cost|amount|current.*price|Price'))
                 # Also check parent's parent
                 if not price_elem:
-                    grandparent = parent.find_parent(['div', 'article'])
+                    grandparent = parent.find_parent(['div', 'article', 'section'])
                     if grandparent:
-                        price_elem = grandparent.find(['span', 'div'], class_=re.compile(r'price|cost|amount|current.*price'))
+                        price_elem = grandparent.find(['span', 'div'], class_=re.compile(r'price|cost|amount|current.*price|Price'))
+                if price_elem:
+                    extraction_methods.append("parent container")
         
         # Method 6: Search entire link text for price pattern
         if not price_elem:
@@ -471,8 +495,10 @@ def _extract_price_from_link(link) -> Tuple[str, str]:
             # Look for price patterns: $XX.XX or $XX or Starting at $XX
             price_patterns = [
                 r'\$[\d,]+\.?\d{2}',  # $XX.XX format
+                r'\$[\d,]+\.?\d{1}',  # $XX.X format
                 r'\$[\d,]+',  # $XX format
-                r'(?:starting|from|price)[:\s]*\$?[\d,]+\.?\d*',  # "Starting at $XX" format
+                r'(?:starting|from|price|now)[:\s]*\$?[\d,]+\.?\d*',  # "Starting at $XX" format
+                r'price[:\s]*\$?[\d,]+\.?\d*',  # "Price: $XX" format
             ]
             for pattern in price_patterns:
                 price_match = re.search(pattern, link_text, re.IGNORECASE)
@@ -481,11 +507,14 @@ def _extract_price_from_link(link) -> Tuple[str, str]:
                     # Extract just the $XX.XX part
                     dollar_match = re.search(r'\$[\d,]+\.?\d*', price_text)
                     if dollar_match:
+                        logger.debug(f"Price found via link text pattern: {dollar_match.group(0)}")
                         return (dollar_match.group(0), 'USD')
                     # If no $ sign, add it
                     num_match = re.search(r'[\d,]+\.?\d*', price_text)
                     if num_match:
-                        return (f"${num_match.group(0)}", 'USD')
+                        price_val = f"${num_match.group(0)}"
+                        logger.debug(f"Price found via link text (no $): {price_val}")
+                        return (price_val, 'USD')
         
         # Method 7: Extract from found element
         if price_elem:
@@ -495,21 +524,44 @@ def _extract_price_from_link(link) -> Tuple[str, str]:
             price_match = re.search(r'\$[\d,]+\.?\d*', price_text)
             if price_match:
                 price_value = price_match.group(0)
+                logger.debug(f"Price found via element text: {price_value} (methods: {', '.join(extraction_methods)})")
                 return (price_value, 'USD')
             
             # If no $ sign but has numbers, assume USD
             num_match = re.search(r'[\d,]+\.?\d*', price_text)
             if num_match:
-                return (f"${num_match.group(0)}", 'USD')
+                price_val = f"${num_match.group(0)}"
+                logger.debug(f"Price found via element numbers: {price_val}")
+                return (price_val, 'USD')
         
-        # Method 8: Last resort - search all text in link and its children
+        # Method 8: Search all text in link and its children (last resort)
         all_text = link.get_text(separator=' ', strip=True)
         price_match = re.search(r'\$[\d,]+\.?\d{2}', all_text)
         if price_match:
+            logger.debug(f"Price found via full text search: {price_match.group(0)}")
             return (price_match.group(0), 'USD')
         
+        # Method 9: Look for JSON-LD structured data
+        json_ld = link.find('script', type='application/ld+json')
+        if json_ld:
+            try:
+                import json
+                data = json.loads(json_ld.string)
+                if isinstance(data, dict):
+                    offers = data.get('offers', {})
+                    if isinstance(offers, dict):
+                        price = offers.get('price')
+                        if price:
+                            price_str = f"${price}" if not str(price).startswith('$') else str(price)
+                            logger.debug(f"Price found via JSON-LD: {price_str}")
+                            return (price_str, 'USD')
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        
+        logger.debug("No price found in link element after trying all methods")
+        
     except Exception as e:
-        logger.debug(f"Price extraction error: {e}")
+        logger.warning(f"Price extraction error: {e}", exc_info=True)
     
     return ("", "USD")
 
@@ -523,6 +575,7 @@ async def _fetch_upc_and_price_from_product_page(product_url: str) -> Tuple[str,
         Tuple of (upc_string, price_string) - both may be empty if not found
     """
     try:
+        logger.debug(f"Fetching UPC and price from product page: {product_url}")
         rate_limiter = get_rate_limiter()
         limits = DEFAULT_RATE_LIMITS.get("product_detail", {"rate": 2.0, "capacity": 5.0})
         await rate_limiter.limit("product_detail", **limits)
@@ -537,78 +590,173 @@ async def _fetch_upc_and_price_from_product_page(product_url: str) -> Tuple[str,
         
         async def fetch_product_detail():
             async with httpx.AsyncClient(
-                timeout=httpx.Timeout(30.0, connect=5.0),
+                timeout=httpx.Timeout(45.0, connect=10.0),
                 http2=False
             ) as client:
-                return await client.post(
+                response = await client.post(
                     Config.API_BASE_URL,
                     auth=(Config.OXYLABS_USERNAME, Config.OXYLABS_PASSWORD),
                     json=payload,
                     headers=Config.get_headers()
                 )
+                return response
         
         try:
             response = await retry_with_backoff(
                 fetch_product_detail,
-                max_retries=1,
+                max_retries=2,
                 initial_delay=1.0,
-                max_delay=5.0
+                max_delay=10.0
             )
             
             response.raise_for_status()
             data = response.json()
             
             if not data.get('results') or not data['results']:
+                logger.warning(f"No results returned from API for product page: {product_url}")
                 return ("", "")
             
             html_content = data['results'][0]['content']
+            if not html_content or len(html_content) < 100:
+                logger.warning(f"Received empty or very short HTML content for: {product_url}")
+                return ("", "")
+            
+            logger.debug(f"Successfully fetched HTML content ({len(html_content)} chars) for: {product_url}")
             
             # Extract both UPC and price from the same HTML
             upc = await _extract_upc_from_html(html_content)
             price = await _fetch_price_from_product_page(html_content)
             
+            if upc:
+                logger.info(f"Successfully extracted UPC '{upc}' from: {product_url}")
+            else:
+                logger.debug(f"UPC not found for: {product_url}")
+            
+            if price:
+                logger.info(f"Successfully extracted price '{price}' from product page: {product_url}")
+            else:
+                logger.debug(f"Price not found in product page for: {product_url}")
+            
             return (upc, price)
+        except httpx.TimeoutException as e:
+            logger.warning(f"Timeout fetching product detail page: {product_url} - {e}")
+            return ("", "")
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"HTTP error {e.response.status_code} fetching product detail: {product_url} - {e}")
+            return ("", "")
+        except httpx.NetworkError as e:
+            logger.warning(f"Network error fetching product detail: {product_url} - {e}")
+            return ("", "")
         except Exception as e:
-            logger.debug(f"Could not fetch product detail for {product_url}: {e}")
+            logger.warning(f"Error fetching product detail for {product_url}: {e}", exc_info=True)
             return ("", "")
     except Exception as e:
-        logger.debug(f"Product detail fetch error for {product_url}: {e}")
+        logger.error(f"Unexpected error in _fetch_upc_and_price_from_product_page for {product_url}: {e}", exc_info=True)
         return ("", "")
 
 async def _extract_upc_from_html(html_content: str) -> str:
-    """Extract UPC from HTML content"""
+    """Extract UPC from HTML content with comprehensive methods
+    
+    Args:
+        html_content: HTML content of product detail page
+        
+    Returns:
+        UPC string or empty string if not found
+    """
+    extraction_methods = []
     try:
+        if not html_content or len(html_content) < 100:
+            logger.debug("HTML content too short for UPC extraction")
+            return ""
+        
         soup = BeautifulSoup(html_content, 'lxml')
         
-        # Find Specifications section
-        spec_sections = soup.find_all(['div', 'section', 'dl'], class_=re.compile(r'spec|detail|info'))
+        # Method 1: Find Specifications section
+        spec_sections = soup.find_all(['div', 'section', 'dl'], class_=re.compile(r'spec|detail|info|Specification'))
         
         for section in spec_sections:
             text = section.get_text()
-            upc_match = re.search(r'UPC[:\s]+(\d+)', text, re.IGNORECASE)
+            # Look for UPC: pattern (with or without colon)
+            upc_match = re.search(r'UPC[:\s]+(\d{8,14})', text, re.IGNORECASE)
             if upc_match:
-                return upc_match.group(1)
+                upc = upc_match.group(1)
+                # Validate UPC length (typically 12 digits)
+                if 8 <= len(upc) <= 14:
+                    logger.debug(f"UPC found via specifications section: {upc}")
+                    return upc
         
-        # Alternative: Look for dt/dd pattern
+        # Method 2: Look for dt/dd pattern (definition list)
         dt_elements = soup.find_all('dt')
         for dt in dt_elements:
-            if 'UPC' in dt.get_text().upper():
+            dt_text = dt.get_text().upper()
+            if 'UPC' in dt_text or 'UNIVERSAL PRODUCT CODE' in dt_text:
                 dd = dt.find_next_sibling('dd')
                 if dd:
                     upc_text = dd.get_text(strip=True)
-                    upc_match = re.search(r'(\d+)', upc_text)
+                    upc_match = re.search(r'(\d{8,14})', upc_text)
                     if upc_match:
-                        return upc_match.group(1)
+                        upc = upc_match.group(1)
+                        if 8 <= len(upc) <= 14:
+                            logger.debug(f"UPC found via dt/dd pattern: {upc}")
+                            return upc
         
-        # Alternative: Search entire page
+        # Method 3: Look for meta tags
+        meta_tags = soup.find_all('meta', attrs={'property': re.compile(r'product|upc', re.I)})
+        for meta in meta_tags:
+            content = meta.get('content', '')
+            if content:
+                upc_match = re.search(r'(\d{8,14})', content)
+                if upc_match:
+                    upc = upc_match.group(1)
+                    if 8 <= len(upc) <= 14:
+                        logger.debug(f"UPC found via meta tag: {upc}")
+                        return upc
+        
+        # Method 4: Look for JSON-LD structured data
+        json_ld_scripts = soup.find_all('script', type='application/ld+json')
+        for script in json_ld_scripts:
+            try:
+                import json
+                data = json.loads(script.string)
+                if isinstance(data, dict):
+                    # Check for UPC in various possible locations
+                    upc = data.get('gtin') or data.get('gtin12') or data.get('gtin13') or data.get('upc')
+                    if upc:
+                        upc_str = str(upc).strip()
+                        if upc_str.isdigit() and 8 <= len(upc_str) <= 14:
+                            logger.debug(f"UPC found via JSON-LD: {upc_str}")
+                            return upc_str
+            except (json.JSONDecodeError, AttributeError, TypeError):
+                continue
+        
+        # Method 5: Search entire page text for UPC pattern
         page_text = soup.get_text()
-        upc_match = re.search(r'UPC[:\s]+(\d{11,13})', page_text, re.IGNORECASE)
-        if upc_match:
-            return upc_match.group(1)
+        # Look for UPC: followed by 8-14 digits
+        upc_patterns = [
+            r'UPC[:\s]+(\d{8,14})',
+            r'Universal\s+Product\s+Code[:\s]+(\d{8,14})',
+            r'GTIN[:\s]+(\d{8,14})',
+        ]
+        for pattern in upc_patterns:
+            upc_match = re.search(pattern, page_text, re.IGNORECASE)
+            if upc_match:
+                upc = upc_match.group(1)
+                if 8 <= len(upc) <= 14:
+                    logger.debug(f"UPC found via page text search ({pattern}): {upc}")
+                    return upc
         
+        # Method 6: Look for data attributes
+        elements_with_data = soup.find_all(attrs={'data-upc': True})
+        for elem in elements_with_data:
+            upc = elem.get('data-upc', '').strip()
+            if upc.isdigit() and 8 <= len(upc) <= 14:
+                logger.debug(f"UPC found via data-upc attribute: {upc}")
+                return upc
+        
+        logger.debug("UPC not found after trying all extraction methods")
         return ""
     except Exception as e:
-        logger.debug(f"UPC extraction from HTML error: {e}")
+        logger.warning(f"UPC extraction from HTML error: {e}", exc_info=True)
         return ""
 
 async def _fetch_price_from_product_page_url(product_url: str) -> str:
@@ -854,7 +1002,7 @@ def _extract_image_from_link(link) -> str:
     return ""
 
 def _generate_filename(search_keyword: str) -> str:
-    """Generate clean filename for search results"""
+    """Generate clean filename for search results (CSV)"""
     # Clean the keyword for filename
     clean_keyword = re.sub(r'[^\w\s-]', '', search_keyword)
     clean_keyword = re.sub(r'[-\s]+', '_', clean_keyword)
@@ -864,6 +1012,18 @@ def _generate_filename(search_keyword: str) -> str:
     os.makedirs(Config.OUTPUT_DIR, exist_ok=True)
     
     return os.path.join(Config.OUTPUT_DIR, f"{clean_keyword}_PRODUCTS.csv")
+
+def _generate_json_filename(search_keyword: str) -> str:
+    """Generate clean filename for search results (JSON)"""
+    # Clean the keyword for filename
+    clean_keyword = re.sub(r'[^\w\s-]', '', search_keyword)
+    clean_keyword = re.sub(r'[-\s]+', '_', clean_keyword)
+    clean_keyword = clean_keyword.strip('_').lower()
+    
+    # Ensure output directory exists
+    os.makedirs(Config.OUTPUT_DIR, exist_ok=True)
+    
+    return os.path.join(Config.OUTPUT_DIR, f"{clean_keyword}_PRODUCTS.json")
 
 async def save_products_csv_async(products: List[Dict[str, str]], filename: str) -> None:
     """
@@ -889,8 +1049,34 @@ async def save_products_csv_async(products: List[Dict[str, str]], filename: str)
         output.close()
         
         # Write asynchronously
-        async with aiofiles.open(filename, 'w', encoding='utf-8') as f:
+        async with aiofiles.open(filename, 'w', encoding='utf-8', newline='') as f:
             await f.write(csv_content)
+        
+        logger.info(f"Successfully saved products to {filename}")
+    except Exception as e:
+        logger.error(f"Error saving products to {filename}: {e}")
+        raise
+
+async def save_products_json_async(products: List[Dict[str, str]], filename: str) -> None:
+    """
+    Async save products to JSON file using aiofiles
+    
+    Args:
+        products: List of product dictionaries
+        filename: Output filename
+    """
+    logger.info(f"Saving {len(products)} products to {filename}")
+    
+    try:
+        import aiofiles
+        import json
+        
+        # Prepare JSON content
+        json_content = json.dumps(products, indent=2, ensure_ascii=False)
+        
+        # Write asynchronously
+        async with aiofiles.open(filename, 'w', encoding='utf-8') as f:
+            await f.write(json_content)
         
         logger.info(f"Successfully saved products to {filename}")
     except Exception as e:

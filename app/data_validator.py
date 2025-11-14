@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 class DataValidator:
     """Validates and checks data quality"""
     
-    # Required fields that must be present
-    REQUIRED_FIELDS = ['listing_title', 'listings_url', 'tcin']
+    # Required fields that must be present (using new format field names)
+    REQUIRED_FIELDS = ['Listing Title*', 'Listings URL*', 'Item Number']
     
     # URL patterns for validation
     VALID_URL_PATTERN = re.compile(r'^https?://(www\.)?target\.com/.*')
@@ -37,19 +37,19 @@ class DataValidator:
                 errors.append(f"Missing required field: {field}")
         
         # Validate URL
-        url = product.get('listings_url', '')
+        url = product.get('Listings URL*', '')
         if url:
             if not cls.VALID_URL_PATTERN.match(url):
                 errors.append(f"Invalid URL format: {url}")
         
-        # Validate TCIN
-        tcin = product.get('tcin', '')
+        # Validate TCIN (now in Item Number column)
+        tcin = product.get('Item Number', '')
         if tcin:
             if not cls.VALID_TCIN_PATTERN.match(str(tcin)):
                 errors.append(f"Invalid TCIN format: {tcin}")
         
         # Validate title
-        title = product.get('listing_title', '')
+        title = product.get('Listing Title*', '')
         if title:
             if len(title) < 3:
                 errors.append(f"Title too short: {title}")
@@ -94,13 +94,13 @@ class DataValidator:
         }
     
     @classmethod
-    def remove_duplicates(cls, products: List[Dict[str, Any]], key: str = 'tcin') -> List[Dict[str, Any]]:
+    def remove_duplicates(cls, products: List[Dict[str, Any]], key: str = 'Item Number') -> List[Dict[str, Any]]:
         """
         Remove duplicate products based on a key field
         
         Args:
             products: List of products
-            key: Field to use for deduplication (default: 'tcin')
+            key: Field to use for deduplication (default: 'Item Number' which contains TCIN)
             
         Returns:
             List of unique products
@@ -111,16 +111,16 @@ class DataValidator:
         for product in products:
             identifier = product.get(key, '')
             
-            # Use URL as fallback if TCIN not available
+            # Use URL as fallback if Item Number (TCIN) not available
             if not identifier:
-                identifier = product.get('listings_url', '')
+                identifier = product.get('Listings URL*', '')
             
             if identifier and identifier not in seen:
                 seen.add(identifier)
                 unique_products.append(product)
             elif not identifier:
                 # If no identifier, still include but log warning
-                logger.warning(f"Product without {key} or URL: {product.get('listing_title', 'Unknown')}")
+                logger.warning(f"Product without {key} or URL: {product.get('Listing Title*', 'Unknown')}")
                 unique_products.append(product)
         
         removed_count = len(products) - len(unique_products)

@@ -28,14 +28,14 @@ A professional, production-ready web scraper for Target.com products with FastAP
 
 ```bash
 # Clone the repository
-git clone https://github.com/christiantereo/targetscraper.git
+git clone https://github.com/christiandbanzon/targetscraper.git
 cd targetscraper
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Create .env file from template
-cp env.example .env
+cp .env.example .env
 
 # Edit .env with your credentials
 # OXYLABS_USERNAME=your_username
@@ -140,7 +140,7 @@ target-scraper/
 ├── setup.py                # Setup script
 ├── test_keyword_api.py     # API tests
 ├── requirements.txt        # Dependencies
-├── env.example             # Environment template
+├── .env.example            # Environment template
 ├── Dockerfile              # Docker config
 ├── docker-compose.yml      # Docker Compose
 ├── docker-run.sh           # Docker convenience script
@@ -165,13 +165,17 @@ target-scraper/
 
 ### Example .env File
 
+See `.env.example` for a complete template. Copy it to `.env` and fill in your credentials:
+
+```bash
+cp .env.example .env
+# Edit .env with your Oxylabs credentials
+```
+
+Minimum required variables:
 ```bash
 OXYLABS_USERNAME=your_username_here
 OXYLABS_PASSWORD=your_password_here
-API_TIMEOUT=120
-API_MAX_RETRIES=3
-LOG_LEVEL=INFO
-OUTPUT_DIR=outputs
 ```
 
 ## Docker Deployment
@@ -273,7 +277,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 1. **"OXYLABS_USERNAME and OXYLABS_PASSWORD must be set"**
    - Create a `.env` file with your credentials
-   - See `env.example` for template
+   - See `.env.example` for template
+   - Copy `.env.example` to `.env` and fill in your credentials
 
 2. **"Connection refused"**
    - Check if API server is running

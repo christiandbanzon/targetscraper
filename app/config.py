@@ -54,9 +54,10 @@ class Config:
     # File Settings
     OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
     CSV_FIELDNAMES = [
-        "listing_title", "listings_url", "image_url", "marketplace", "price", "currency",
-        "shipping", "units_available", "item_number", "tcin", "upc", "seller_name",
-        "seller_url", "seller_business", "seller_address", "seller_email", "seller_phone"
+        "Listing Title*", "Listings URL*", "Image URL*", "Marketplace*", "Price*", "Shipping",
+        "Units Available", "Item Number", "Brand", "ASIN", "UPC", "Walmart ID",
+        "Seller's Name*", "Seller's URL*", "Seller's Business Name", "Seller's Address",
+        "Seller's Email", "Seller's Phone Number"
     ]
     
     # Target Store Info
