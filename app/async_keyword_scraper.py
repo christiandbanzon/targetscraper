@@ -1060,6 +1060,7 @@ async def save_products_csv_async(products: List[Dict[str, str]], filename: str)
 async def save_products_json_async(products: List[Dict[str, str]], filename: str) -> None:
     """
     Async save products to JSON file using aiofiles
+    Ensures field order matches CSV format exactly
     
     Args:
         products: List of product dictionaries
@@ -1070,9 +1071,19 @@ async def save_products_json_async(products: List[Dict[str, str]], filename: str
     try:
         import aiofiles
         import json
+        from collections import OrderedDict
         
-        # Prepare JSON content
-        json_content = json.dumps(products, indent=2, ensure_ascii=False)
+        # Ensure field order matches CSV_FIELDNAMES exactly
+        ordered_products = []
+        for product in products:
+            ordered_product = OrderedDict()
+            # Add fields in the exact order of CSV_FIELDNAMES
+            for field in Config.CSV_FIELDNAMES:
+                ordered_product[field] = product.get(field, '')
+            ordered_products.append(ordered_product)
+        
+        # Prepare JSON content with proper field order
+        json_content = json.dumps(ordered_products, indent=2, ensure_ascii=False)
         
         # Write asynchronously
         async with aiofiles.open(filename, 'w', encoding='utf-8') as f:

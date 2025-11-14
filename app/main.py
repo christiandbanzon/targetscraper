@@ -205,6 +205,45 @@ async def get_job_status(job_id: str):
     job = jobs[job_id]
     return JobStatus(**job)
 
+# Get products as JSON endpoint
+@app.get("/jobs/{job_id}/products")
+async def get_job_products(job_id: str):
+    """Get products from a completed job as JSON (matches CSV format)"""
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = jobs[job_id]
+    if job["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Job not completed yet")
+    
+    # Look for JSON files in outputs directory
+    keyword = job.get("keyword", "unknown")
+    category = job.get("category", "unknown")
+    
+    # Try to find the most recent JSON file
+    json_files = []
+    if os.path.exists("outputs"):
+        for filename in os.listdir("outputs"):
+            if filename.endswith('.json') and (keyword.lower() in filename.lower() or category.lower() in filename.lower()):
+                file_path = os.path.join("outputs", filename)
+                json_files.append((filename, os.path.getmtime(file_path)))
+    
+    if not json_files:
+        raise HTTPException(status_code=404, detail="No JSON file found for this job")
+    
+    # Get the most recent file
+    latest_file = max(json_files, key=lambda x: x[1])
+    file_path = os.path.join("outputs", latest_file[0])
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="JSON file not found")
+    
+    # Read and return JSON content
+    with open(file_path, 'r', encoding='utf-8') as f:
+        products = json.load(f)
+    
+    return JSONResponse(content=products)
+
 # Download CSV endpoint
 @app.get("/download/{job_id}/csv")
 async def download_csv(job_id: str):
