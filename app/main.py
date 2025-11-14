@@ -105,6 +105,7 @@ async def root():
             "scrape_keyword": "/scrape/keyword",
             "scrape_batch": "/scrape/keywords/batch",
             "job_status": "/jobs/{job_id}",
+            "job_products": "/jobs/{job_id}/products",
             "download_csv": "/download/{job_id}/csv",
             "download_json": "/download/{job_id}/json",
             "list_jobs": "/jobs",
